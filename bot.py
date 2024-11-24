@@ -157,16 +157,16 @@ def main_schedule_parse(filename):
         return f'Ошибка при парсинге расписания 11-х классов!\nОшибка:\n{ex}'
 
     #  рассылка уведомления о загрузке расписания
-    # for user in users.objects.all():
-    #     kb = types.InlineKeyboardMarkup()
-    #     kb.add(types.InlineKeyboardButton('расписание на сегодня', callback_data='get_schedule=today'))
-    #     kb.add(types.InlineKeyboardButton('расписание на завтра', callback_data='get_schedule=tommorow'))
-    #     try:
-    #         bot.send_message(user.user_id, f'Загружено расписание на {date}', reply_markup=kb)
-    #     except ApiTelegramException as ex:
-    #         if ex.description == 'Forbidden: bot was blocked by the user':
-    #             user.delete()
-    #     time.sleep(0.036)
+    for user in users.objects.all():
+        kb = types.InlineKeyboardMarkup()
+        kb.add(types.InlineKeyboardButton('расписание на сегодня', callback_data='get_schedule=today'))
+        kb.add(types.InlineKeyboardButton('расписание на завтра', callback_data='get_schedule=tommorow'))
+        try:
+            bot.send_message(user.user_id, f'Загружено расписание на {date}', reply_markup=kb)
+        except ApiTelegramException as ex:
+            if ex.description == 'Forbidden: bot was blocked by the user':
+                user.delete()
+        time.sleep(0.036)
     return 'Расписание сохранено успешно!'
 
 
