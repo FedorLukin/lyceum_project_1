@@ -5,6 +5,7 @@ import time
 import os
 from cachetools import TTLCache
 from dotenv import load_dotenv
+from typing import Optional, Union
 from db.models import regular_schedule
 from db.models import uday_schedule
 from db.models import users
@@ -21,7 +22,20 @@ messages_cache = TTLCache(maxsize=400, ttl=5)
 errors_cache = TTLCache(maxsize=10, ttl=100)
 
 
-def caching_decorator(func):
+def caching_decorator(func: callable) -> callable:
+    """
+    Декоратор, кэширующий запросы пользователя к боту.
+
+    Декоратор ограничивает количество запросов от пользователя,
+    если запрос не был выполнен пользователем недвано выполняется оборачиваемая функция,
+    иначе функция не выполняется
+
+    Аргументы:
+        func (callable): Декорируемая функция.
+    
+    Возвращает:
+        (callable): Декорированная функция, принимающая сообщение пользователя.
+        """
     def wrapped(*args):
         message = args[0]
         user_id = message.from_user.id
@@ -31,16 +45,36 @@ def caching_decorator(func):
     return wrapped
 
 
-def parent_of_merged_cell(cell):
+def parent_of_merged_cell(cell: openpyxl.cell.cell.MergedCell) -> str:
+    """
+    Функция, ищущая родителя объединённой клетки таблицы.
+
+    Аргументы:
+        cell (openpyxl.cell.cell.MergedCell): Объединённая клетка.
+    
+    Возвращает:
+        str: Координаты родительской клетки.
+    """
     sheet = cell.parent
     child_coord = cell.coordinate
     for merged in sheet.merged_cells.ranges:
         if child_coord in merged:
             return merged.start_cell.coordinate
-    return None
 
 
-def cell_value(cell):
+def cell_value(cell: Union[openpyxl.cell.cell.Cell, openpyxl.cell.cell.MergedCell]) -> str:
+    """
+    Функция возвращающая значение клетки.
+
+    Функция проверяет тип клетки, возвращает её значение если это обычная клетка, ищет родительскую клетку
+    и возвращает её значение если клетка совмещённая.
+    
+    Аргументы:
+        cell Union[openpyxl.cell.cell.Cell, openpyxl.cell.cell.MergedCell]: Клетка с искомым значением.
+
+    Возвращает:
+        str: Значение клетки.
+    """
     if isinstance(cell, openpyxl.cell.cell.Cell):
         return cell.value
     if isinstance(cell, openpyxl.cell.cell.MergedCell):
@@ -49,8 +83,26 @@ def cell_value(cell):
         return parent.value
 
 
-def regular_classes_schedule_parsing(date, worksheet, times_list, start_row, start_col, end_row, end_col):
-    """функция парсинга расписания классов"""
+def regular_classes_schedule_parsing(date: dt.date, worksheet: openpyxl.worksheet.worksheet.Worksheet,
+                                     times_list: list, start_row: int, start_col: int, end_row: int,
+                                     end_col: int) -> None:
+    """
+    функция парсинга обычного расписания классов.
+
+    Функция итерируется по столбцам и клеткам столбца, читает расписание и сохраняет его в базу данных.
+
+    Аргументы:
+        date (dt.date): Дата из файла с расписанием.
+        worksheet (openpyxl.worksheet.worksheet.Worksheet): Страница эксель файла.
+        times_list (list): Список с таймингами уроков.
+        start_row (int): Начальная строка итерации.
+        start_col (int): Начальный столбец итерации.
+        end_row (int): Конечная строка итерации.
+        end_col (int): Конечный столбец итерации.
+
+    Возвращает:
+        None: функция ничего не возвращает.
+    """
     for col in worksheet.iter_cols(min_row=start_row, min_col=start_col, max_row=end_row, max_col=end_col):
         key = cell_value(col[0])
         groups = ('гр.А', 'гр.Б')
@@ -62,8 +114,25 @@ def regular_classes_schedule_parsing(date, worksheet, times_list, start_row, sta
                                                 group_number=group, date=date)
 
 
-def uday_groups_schedule_parsing(date, worksheet, times_list, start_row, start_col, end_row, end_col):
-    """функция парсинга расписания групп на универдне"""
+def uday_groups_schedule_parsing(date: dt.date, worksheet: openpyxl.worksheet.worksheet.Worksheet,
+                                 times_list: list, start_row: int, start_col: int, end_row: int, end_col: int) -> None:
+    """
+    функция парсинга расписания для групп на универдень.
+
+    Функция итерируется по столбцам и клеткам столбца, читает расписание и сохраняет его в базу данных.
+
+    Аргументы:
+        date (dt.date): Дата из файла с расписанием.
+        worksheet (openpyxl.worksheet.worksheet.Worksheet): Страница эксель файла.
+        times_list (list): Список с таймингами уроков.
+        start_row (int): Начальная строка итерации.
+        start_col (int): Начальный столбец итерации.
+        end_row (int): Конечная строка итерации.
+        end_col (int): Конечный столбец итерации.
+
+    Возвращает:
+        None: функция ничего не возвращает.
+    """
     done = set()
     for col in worksheet.iter_cols(min_row=start_row, min_col=start_col, max_row=end_row, max_col=end_col):
         group = int(cell_value(col[0]).split()[0])
@@ -76,8 +145,25 @@ def uday_groups_schedule_parsing(date, worksheet, times_list, start_row, start_c
                 uday_schedule.objects.create(lesson_number=i, lesson_info=lesson_info, group_number=group, date=date)
 
 
-def uday_classes_schedule_parsing(date, worksheet, times_list, start_row, start_col, end_row, end_col):
-    """функция парсинга расписания классов на универдне"""
+def uday_classes_schedule_parsing(date: dt.date, worksheet: openpyxl.worksheet.worksheet.Worksheet,
+                                  times_list: list, start_row: int, start_col: int, end_row: int, end_col: int) -> None:
+    """
+    функция парсинга расписания для классов на универдень.
+
+    Функция итерируется по столбцам и клеткам столбца, читает расписание и сохраняет его в базу данных.
+
+    Аргументы:
+        date (dt.date): Дата из файла с расписанием.
+        worksheet (openpyxl.worksheet.worksheet.Worksheet): Страница эксель файла.
+        times_list (list): Список с таймингами уроков.
+        start_row (int): Начальная строка итерации.
+        start_col (int): Начальный столбец итерации.
+        end_row (int): Конечная строка итерации.
+        end_col (int): Конечный столбец итерации.
+
+    Возвращает:
+        None: функция ничего не возвращает.
+    """
     done = set()
     for col in worksheet.iter_cols(min_row=start_row, min_col=start_col, max_row=end_row, max_col=end_col):
         key = cell_value(col[0])
@@ -91,8 +177,20 @@ def uday_classes_schedule_parsing(date, worksheet, times_list, start_row, start_
                                                 group_number=0, date=date)
 
 
-def main_schedule_parse(filename):
-    """функция парсинга расписания"""
+def main_schedule_parse(filename: str) -> str:
+    """
+    Основная функция парсинга расписания.
+
+    Функция открывает файл с расписанием и вызывает вспомогательные функции для парсинга расписания в зависимости
+    от дня недели. В случае успешного парсинга функция рассылает пользователям уведомление о загрузке расписания.
+
+    Аргументы:
+        filename (str): Имя открываемого файла.
+    
+    Возвращает:
+        str: Сообщение об успехе или ошибке в ходе выполнения функции.
+
+    """
     workbook = openpyxl.load_workbook(f'./uploads/{filename}')
     os.remove(f'./uploads/{filename}')
     today = dt.date.today()
@@ -170,8 +268,20 @@ def main_schedule_parse(filename):
     return 'Расписание сохранено успешно!'
 
 
-def confirm_notification(message, recievers):
-    """подтверждение рассылки"""
+def confirm_notification(message: telebot.types.Message, recievers: str) -> None:
+    """
+    Функция подтверждения содержимого рассылаемого сообщения.
+        
+    Функция запрашивает у админа подтверждение запуска рассылки и в зависимости от ответа
+    запускает или отменяет рассылки.
+
+    Аргументы:
+        message (telebot.types.Message): Сообщение отправленное ранее админом.
+        recievers (str): Получатели сообщения.
+
+    Возвращает:
+        None: Функция ничего не возвращает.
+    """
     kb = types.InlineKeyboardMarkup(row_width=1)
     kb.add(types.InlineKeyboardButton('отправить', callback_data=f'send={recievers}'),
            types.InlineKeyboardButton('отмена', callback_data='back_to_admin'))
@@ -187,8 +297,19 @@ def confirm_notification(message, recievers):
                          reply_markup=kb)
 
 
-def schedule_adding(message):
-    """получение расписания"""
+def schedule_adding(message: telebot.types.Message) -> None:
+    """
+    Функция получения файла с расписанием.
+    
+    Функция получает сообщение от админа, если оно содержит .xlsx файл - вызывает функцию парсинга, иначе отправляет
+    сообщение об ошибке.
+
+    Аргументы:
+        message (telebot.types.Message): Сообщение с файлом расписания отправленное админом.
+    
+    Возвращает:
+        None: Функция ничего не возвращает.
+    """
     kb = types.InlineKeyboardMarkup()
     kb.add(types.InlineKeyboardButton('вернуться к админ-панели', callback_data='back_to_admin'))
     if message.content_type == 'document' and message.document.file_name.endswith('.xlsx'):
@@ -206,8 +327,18 @@ def schedule_adding(message):
 
 @bot.message_handler(commands=['get'])
 @caching_decorator
-def get(message):
-    """ответ на запрос расписания"""
+def get(message: telebot.types.Message) -> None:
+    """
+    Функция ответа на запрос расписания.
+
+    Функция отправляет пользователю в ответ сообщение, запрашивая день на которой необходимо отправить расписание.
+
+    Аргументы:
+        message (telebot.types.Message): Сообщение отправленное пользователем.
+
+    Возвращает:
+        None: Функция ничего не возвращает.
+    """
     if users.objects.filter(user_id=message.from_user.id).exists():
         kb = types.InlineKeyboardMarkup()
         kb.add(types.InlineKeyboardButton('расписание на сегодня', callback_data='get_schedule=today'))
@@ -217,8 +348,18 @@ def get(message):
 
 @bot.message_handler(commands=['start', 'edit'])
 @caching_decorator
-def start(message):
-    """обработка комманды /start"""
+def start(message: telebot.types.Message) -> None:
+    """
+    Функция обработки команд /start и /edit.
+
+    Функция отправляет пользователю в ответ сообщение с предложением заполнить данные.
+
+    Аргументы:
+        message (telebot.types.Message): Сообщение отправленное пользователем.
+    
+    Возвращает:
+        None: Функция ничего не возвращает.
+    """
     command = message.text
     if command == '/start' and not users.objects.filter(user_id=message.from_user.id).exists() or command == '/edit':
         kb = types.InlineKeyboardMarkup()
@@ -227,8 +368,19 @@ def start(message):
 
 
 @bot.message_handler(commands=['admin'])
-def admin_panel(message):
-    """админ-панель"""
+def admin_panel(message: telebot.types.Message) -> None:
+    """
+    Функция админ-панели.
+
+    Функция проверяет является ли пользователь админом бота и предоставляет доступр к админ-панели если это так,
+    иначе запрос пользователя игнорируется.
+
+    Аргументы:
+        message (telebot.types.Message): Сообщение отправленное поьзователем.
+    
+    Возвращает:
+        None: Функция ничего не возвращает.
+    """
     if str(message.from_user.id) == os.getenv('ADMIN_ID'):
         kb = types.InlineKeyboardMarkup(row_width=1)
         kb.add(types.InlineKeyboardButton('Добавить расписание', callback_data='add_schedule'),
@@ -238,8 +390,18 @@ def admin_panel(message):
 
 
 @bot.callback_query_handler(func=lambda callback: True)
-def callback_message(callback):
-    """обработка нажатий на кнопки"""
+def callback_message(callback: telebot.types.CallbackQuery) -> None:
+    """
+    Функция обработки пользовательских нажатий на кнопки.
+
+    Функция отвечает на запросы пользователя, сделанные посредством нажатий кнопок.
+
+    Аргументы:
+        callback (telebot.types.CallbackQuery): Коллбэк вызванный нажатием на кнопку.
+    
+    Возвращает:
+        None: Функция ничего не возвращает.
+    """
     # выбор цифры класса
     if callback.data == 'choice':
         keyboard = types.InlineKeyboardMarkup(row_width=2)
