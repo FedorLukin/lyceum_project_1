@@ -11,10 +11,10 @@ def init_django():
         ],
         DATABASES = {
         'default': {
-        'ENGINE': 'django.db.backends.postgresql_psycopg2',
-        'NAME': 'schedule_project',
-        'USER': 'postgres',
-        'PASSWORD': 'yvc5bdhw',
+        'ENGINE': 'your dbms engine',
+        'NAME': 'your db name',
+        'USER': 'your username',
+        'PASSWORD': 'your db password',
         'HOST': 'localhost',
         'PORT': '5432',
             }
